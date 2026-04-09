@@ -1,0 +1,45 @@
+{
+  "profile_id": "default",
+  "listener_name": "Chaayageet Listener",
+  "playlist_prefix": "Chaayageet",
+  "songs_per_week": 12,
+  "include_queries": [
+    "classic hindi songs",
+    "90s hindi romantic songs",
+    "kishore kumar hindi songs",
+    "lata mangeshkar hits",
+    "old hindi ghazal songs",
+    "soft hindi rainy songs"
+  ],
+  "exclude_keywords": [
+    "remix",
+    "dj",
+    "slowed",
+    "reverb",
+    "lofi",
+    "shorts"
+  ],
+  "preferred_artists": [
+    "Kishore Kumar",
+    "Lata Mangeshkar",
+    "Mohammed Rafi",
+    "Asha Bhosle",
+    "Jagjit Singh"
+  ],
+  "preferred_eras": [
+    "golden era",
+    "70s",
+    "80s",
+    "90s"
+  ],
+  "preferred_moods": [
+    "warm",
+    "romantic",
+    "nostalgic",
+    "evening"
+  ],
+  "language_hint": "Hindi",
+  "country_code": "IN",
+  "playlist_description": "Weekly Hindi song selections curated for chai time.",
+  "use_llm": false
+}
