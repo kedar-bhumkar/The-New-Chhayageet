@@ -32,18 +32,18 @@ Example:
 
 ```json
 {
-  "youtube_account": "mandar",
+  "youtube_account": "yt",
   "no_of_songs_per_playlist": 12,
   "playlist_name_prefix": "Chaayageet"
 }
 ```
 
-If `youtube_account` is `mandar`, the app resolves YouTube auth files as:
+If `youtube_account` is `yt`, the app resolves YouTube auth files as:
 
-- `secrets/youtube/mandar-secret.json`
-- `secrets/youtube/mandar-token.pickle`
+- `secrets/youtube/yt-secret.json`
+- `secrets/youtube/yt-token.pickle`
 
-The same pattern works for `jay`, `kedar`, and other account names.
+The same pattern works for `Amar`, `Akbar`, `Anthony` and other account names.
 
 ## Setup
 
@@ -72,9 +72,8 @@ Optional YouTube fallback variables:
 
 Examples:
 
-- `secrets/youtube/mandar-secret.json`
-- `secrets/youtube/jay-secret.json`
-- `secrets/youtube/kedar-secret.json`
+- `secrets/youtube/yt-secret.json`
+
 
 4. Apply the Supabase schema in [schema.sql](C:\DDrive\Programming\Project\misc\The New Chhayageet\supabase\schema.sql).
 
@@ -89,7 +88,7 @@ Examples:
 7. Sync runtime guidance into Supabase.
 
 ```powershell
-.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account mandar --songs-per-playlist 12 --playlist-prefix Chaayageet
+.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet
 ```
 
 8. Authenticate the target YouTube account.
@@ -115,7 +114,7 @@ Sync profile:
 Sync guidance:
 
 ```powershell
-.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account kedar --songs-per-playlist 12 --playlist-prefix Chaayageet
+.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet
 ```
 
 Force YouTube re-auth:
