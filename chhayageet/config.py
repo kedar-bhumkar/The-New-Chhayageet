@@ -4,6 +4,7 @@ import json
 from dataclasses import asdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -12,26 +13,56 @@ class GuidanceConfig:
     no_of_songs_per_playlist: int
     playlist_name_prefix: str
     preferred_model: str = "none"
+    mode: str = "random"
+    candidate_pool_size: int = 50
+    preferred_singers: list[str] | None = None
+    preferred_music_directors: list[str] | None = None
+    year_min: int | None = None
+    year_max: int | None = None
+    min_song_rating: float | None = None
+    min_album_rating: float | None = None
 
     @classmethod
     def from_file(cls, path: str | Path) -> "GuidanceConfig":
         with Path(path).open("r", encoding="utf-8") as handle:
             payload = json.load(handle)
         guidance = payload.get("guidance", payload)
-        guidance.setdefault("preferred_model", "none")
-        return cls(**guidance)
+        return cls(**cls._normalize_guidance(guidance))
 
     @classmethod
     def from_dict(cls, payload: dict) -> "GuidanceConfig":
         guidance = payload.get("guidance", payload)
-        guidance.setdefault("preferred_model", "none")
-        return cls(**guidance)
+        return cls(**cls._normalize_guidance(guidance))
 
     def to_row(self, config_key: str = "default") -> dict:
         return {
             "config_key": config_key,
             "guidance": asdict(self),
         }
+
+    @classmethod
+    def _normalize_guidance(cls, guidance: dict[str, Any]) -> dict[str, Any]:
+        allowed_keys = {
+            "youtube_account",
+            "no_of_songs_per_playlist",
+            "playlist_name_prefix",
+            "preferred_model",
+            "mode",
+            "candidate_pool_size",
+            "preferred_singers",
+            "preferred_music_directors",
+            "year_min",
+            "year_max",
+            "min_song_rating",
+            "min_album_rating",
+        }
+        shaped = {key: value for key, value in guidance.items() if key in allowed_keys}
+        shaped.setdefault("preferred_model", "none")
+        shaped.setdefault("mode", "random")
+        shaped.setdefault("candidate_pool_size", 50)
+        shaped.setdefault("preferred_singers", None)
+        shaped.setdefault("preferred_music_directors", None)
+        return shaped
 
 
 @dataclass(slots=True)

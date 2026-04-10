@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 
+from chhayageet.catalog_curation_engine import CatalogCurationEngine
+from chhayageet.catalog_store import CatalogStore
 from chhayageet.config import GuidanceConfig, ListenerProfile
 from chhayageet.curation_engine import CurationEngine
+from chhayageet.csv_importer import CatalogCsvImporter
 from chhayageet.env import load_environment
 from chhayageet.history_store import HistoryStore
 from chhayageet.llm_curator import LLMCurator
@@ -81,6 +84,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Playlist title prefix",
     )
     sync_config.add_argument(
+        "--mode",
+        default="random",
+        choices=["random", "user-driven", "youtube-search"],
+        help="Curation mode",
+    )
+    sync_config.add_argument(
+        "--candidate-pool-size",
+        default=50,
+        type=int,
+        help="Number of catalog candidates to validate before final selection",
+    )
+    sync_config.add_argument(
+        "--preferred-singer",
+        action="append",
+        dest="preferred_singers",
+        help="Preferred singer for user-driven mode; can be provided multiple times",
+    )
+    sync_config.add_argument(
+        "--preferred-music-director",
+        action="append",
+        dest="preferred_music_directors",
+        help="Preferred music director for user-driven mode; can be provided multiple times",
+    )
+    sync_config.add_argument("--year-min", type=int, default=None, help="Minimum album year")
+    sync_config.add_argument("--year-max", type=int, default=None, help="Maximum album year")
+    sync_config.add_argument("--min-song-rating", type=float, default=None, help="Minimum song rating")
+    sync_config.add_argument("--min-album-rating", type=float, default=None, help="Minimum album rating")
+    sync_config.add_argument(
         "--preferred-model",
         default="none",
         help="LLM model as provider:model, for example openai:gpt-4.1-mini, claude:claude-sonnet-4-5, gemini:gemini-2.0-flash, ollama:llama3.1, or none",
@@ -112,6 +143,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="default",
         help="Config key stored in Supabase",
     )
+
+    import_catalog = subparsers.add_parser("import-catalog", help="Import album and song CSV files into Supabase")
+    import_catalog.add_argument(
+        "--albums-dir",
+        default="data/songs/All/data/raw/albums data",
+        help="Directory containing album CSV files",
+    )
+    import_catalog.add_argument(
+        "--songs-dir",
+        default="data/songs/All/data/raw/songs data",
+        help="Directory containing song CSV files",
+    )
     return parser
 
 
@@ -127,16 +170,26 @@ def run_weekly(args: argparse.Namespace) -> int:
             youtube_account=guidance.youtube_account,
             force_reauth=args.force_youtube_reauth,
         )
-        engine = CurationEngine(profile, youtube, history, LLMCurator(guidance.preferred_model))
-        result = engine.curate(dry_run=args.dry_run)
+        if guidance.mode in {"random", "user-driven"}:
+            engine = CatalogCurationEngine(profile, guidance, CatalogStore(history), youtube)
+            result = engine.curate(dry_run=args.dry_run)
+        else:
+            engine = CurationEngine(profile, youtube, history, LLMCurator(guidance.preferred_model))
+            result = engine.curate(dry_run=args.dry_run)
     finally:
         history.close()
 
     print(f"Account: {result['channel_title']}")
     playlist_id = result["playlist_id"] if result["playlist_id"] else "not created"
     print(f"Playlist: {result['playlist_title']} ({playlist_id})")
+    print(f"Mode: {result.get('mode', 'youtube-search')}")
     if result["dry_run"]:
         print("Dry run: no YouTube playlist changes or Supabase run history writes were made.")
+    if "candidate_count" in result:
+        print(f"Candidates: {result['candidate_count']}")
+        print(f"Live candidates: {result['live_candidate_count']}")
+        if result.get("reused_existing_selection"):
+            print("Reused existing catalog selection for this playlist title.")
     print(f"Songs selected: {result['selected_count']}")
     for title in result["selected_titles"]:
         print(f"- {title}")
@@ -145,19 +198,33 @@ def run_weekly(args: argparse.Namespace) -> int:
         print("")
         print("Candidates:")
         for item in result["candidates"]:
-            reasons = ", ".join(item["rejection_reasons"]) if item["rejection_reasons"] else "eligible"
-            print(
-                f"[{item['score']:>5}] {item['title']} | artist={item['artist'] or '-'} | "
-                f"era={item['era'] or '-'} | query={item['query']} | status={reasons}"
-            )
+            if "song_uuid" in item:
+                print(
+                    f"[{item['score']:>5}] {item['song_title']} | singers={item['song_singers'] or '-'} | "
+                    f"album={item['album_title'] or '-'} | year={item['album_year'] or '-'} | "
+                    f"status={item['validation_status']}"
+                )
+            else:
+                reasons = ", ".join(item["rejection_reasons"]) if item["rejection_reasons"] else "eligible"
+                print(
+                    f"[{item['score']:>5}] {item['title']} | artist={item['artist'] or '-'} | "
+                    f"era={item['era'] or '-'} | query={item['query']} | status={reasons}"
+                )
 
         print("")
         print("Selected:")
         for item in result["selected"]:
-            print(
-                f"[{item['score']:>5}] {item['title']} | video_id={item['video_id']} | "
-                f"artist={item['artist'] or '-'} | era={item['era'] or '-'} | query={item['query']}"
-            )
+            if "song_uuid" in item:
+                print(
+                    f"[{item['score']:>5}] {item['song_title']} | video_id={item['youtube_video_id']} | "
+                    f"singers={item['song_singers'] or '-'} | album={item['album_title'] or '-'} | "
+                    f"year={item['album_year'] or '-'}"
+                )
+            else:
+                print(
+                    f"[{item['score']:>5}] {item['title']} | video_id={item['video_id']} | "
+                    f"artist={item['artist'] or '-'} | era={item['era'] or '-'} | query={item['query']}"
+                )
 
         print("")
         print("Playlist update:")
@@ -191,6 +258,14 @@ def sync_config(args: argparse.Namespace) -> int:
         no_of_songs_per_playlist=args.songs_per_playlist,
         playlist_name_prefix=args.playlist_prefix,
         preferred_model=args.preferred_model,
+        mode=args.mode,
+        candidate_pool_size=args.candidate_pool_size,
+        preferred_singers=args.preferred_singers,
+        preferred_music_directors=args.preferred_music_directors,
+        year_min=args.year_min,
+        year_max=args.year_max,
+        min_song_rating=args.min_song_rating,
+        min_album_rating=args.min_album_rating,
     )
     history = HistoryStore()
     try:
@@ -219,6 +294,18 @@ def auth_youtube(args: argparse.Namespace) -> int:
     return 0
 
 
+def import_catalog(args: argparse.Namespace) -> int:
+    history = HistoryStore()
+    try:
+        result = CatalogCsvImporter(history).import_catalog(args.albums_dir, args.songs_dir)
+    finally:
+        history.close()
+
+    print(f"Imported albums: {result['albums']}")
+    print(f"Imported songs: {result['songs']}")
+    return 0
+
+
 def main() -> int:
     load_environment()
     parser = build_parser()
@@ -232,6 +319,8 @@ def main() -> int:
         return sync_config(args)
     if args.command == "auth-youtube":
         return auth_youtube(args)
+    if args.command == "import-catalog":
+        return import_catalog(args)
 
     parser.error(f"Unknown command: {args.command}")
     return 2

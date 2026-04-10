@@ -5,7 +5,9 @@ values (
       "youtube_account": "mandar",
       "no_of_songs_per_playlist": 12,
       "playlist_name_prefix": "Chaayageet",
-      "preferred_model": "none"
+      "preferred_model": "none",
+      "mode": "random",
+      "candidate_pool_size": 50
     }'::jsonb
 )
 on conflict (config_key) do update

@@ -28,6 +28,8 @@ The `config` table stores a `guidance` JSON object with keys:
 - `no_of_songs_per_playlist`
 - `playlist_name_prefix`
 - `preferred_model`
+- `mode`
+- `candidate_pool_size`
 
 Example:
 
@@ -36,7 +38,9 @@ Example:
   "youtube_account": "yt",
   "no_of_songs_per_playlist": 12,
   "playlist_name_prefix": "Chaayageet",
-  "preferred_model": "openai:gpt-4.1-mini"
+  "preferred_model": "none",
+  "mode": "random",
+  "candidate_pool_size": 50
 }
 ```
 
@@ -97,13 +101,19 @@ Examples:
 7. Sync runtime guidance into Supabase.
 
 ```powershell
-.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet --preferred-model none
+.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet --mode random --candidate-pool-size 50 --preferred-model none
 ```
 
 Add `--preferred-model` to enable LLM-assisted query expansion and candidate reranking:
 
 ```powershell
 .\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet --preferred-model openai:gpt-4.1-mini
+```
+
+Import the catalog CSVs:
+
+```powershell
+.\.venv\Scripts\python.exe -m chhayageet.cli import-catalog --albums-dir "data/songs/All/data/raw/albums data" --songs-dir "data/songs/All/data/raw/songs data"
 ```
 
 8. Authenticate the target YouTube account.
@@ -129,7 +139,13 @@ Sync profile:
 Sync guidance:
 
 ```powershell
-.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet --preferred-model none
+.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet --mode random --candidate-pool-size 50 --preferred-model none
+```
+
+Sync user-driven guidance:
+
+```powershell
+.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet --mode user-driven --candidate-pool-size 50 --preferred-singer "Kishore Kumar" --preferred-singer "Lata Mangeshkar" --year-min 1955 --year-max 1985 --min-song-rating 4.0
 ```
 
 Force YouTube re-auth:
@@ -160,8 +176,11 @@ Current rules include:
 - boost preferred artists and eras
 - limit repeated artists, eras, and query buckets in the final set
 - sync the playlist so removed candidates are also removed from YouTube
+- catalog mode reuses an existing same-day catalog selection instead of consuming more songs on rerun
 
 Use `--dry-run` while tuning prompts and filters. It still calls YouTube search and metadata APIs, but it does not create playlists, add videos, delete videos, or write curation history to Supabase.
+
+In catalog mode, the app does not use the YouTube Search API. It picks candidates from the Supabase `songs` table, validates URLs with YouTube oEmbed HTTP checks, and publishes selected video IDs to the playlist.
 
 ## LLM Providers
 
