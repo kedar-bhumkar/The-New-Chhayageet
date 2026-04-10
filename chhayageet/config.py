@@ -11,17 +11,20 @@ class GuidanceConfig:
     youtube_account: str
     no_of_songs_per_playlist: int
     playlist_name_prefix: str
+    preferred_model: str = "none"
 
     @classmethod
     def from_file(cls, path: str | Path) -> "GuidanceConfig":
         with Path(path).open("r", encoding="utf-8") as handle:
             payload = json.load(handle)
         guidance = payload.get("guidance", payload)
+        guidance.setdefault("preferred_model", "none")
         return cls(**guidance)
 
     @classmethod
     def from_dict(cls, payload: dict) -> "GuidanceConfig":
         guidance = payload.get("guidance", payload)
+        guidance.setdefault("preferred_model", "none")
         return cls(**guidance)
 
     def to_row(self, config_key: str = "default") -> dict:

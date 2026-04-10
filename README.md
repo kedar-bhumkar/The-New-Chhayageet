@@ -27,6 +27,7 @@ The `config` table stores a `guidance` JSON object with keys:
 - `youtube_account`
 - `no_of_songs_per_playlist`
 - `playlist_name_prefix`
+- `preferred_model`
 
 Example:
 
@@ -34,7 +35,8 @@ Example:
 {
   "youtube_account": "yt",
   "no_of_songs_per_playlist": 12,
-  "playlist_name_prefix": "Chaayageet"
+  "playlist_name_prefix": "Chaayageet",
+  "preferred_model": "openai:gpt-4.1-mini"
 }
 ```
 
@@ -68,6 +70,13 @@ Optional YouTube fallback variables:
 - `YOUTUBE_OAUTH_CLIENT_SECRETS_JSON`
 - `YOUTUBE_OAUTH_TOKEN_JSON`
 
+Optional LLM variables:
+
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `GEMINI_API_KEY` or `GOOGLE_API_KEY`
+- `OLLAMA_BASE_URL`
+
 3. Create a Google Cloud OAuth desktop client and place account files under `secrets/youtube/`.
 
 Examples:
@@ -88,7 +97,13 @@ Examples:
 7. Sync runtime guidance into Supabase.
 
 ```powershell
-.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet
+.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet --preferred-model none
+```
+
+Add `--preferred-model` to enable LLM-assisted query expansion and candidate reranking:
+
+```powershell
+.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet --preferred-model openai:gpt-4.1-mini
 ```
 
 8. Authenticate the target YouTube account.
@@ -114,7 +129,7 @@ Sync profile:
 Sync guidance:
 
 ```powershell
-.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet
+.\.venv\Scripts\python.exe -m chhayageet.cli sync-config --config-key default --youtube-account yt --songs-per-playlist 12 --playlist-prefix Chaayageet --preferred-model none
 ```
 
 Force YouTube re-auth:
@@ -129,6 +144,12 @@ Run curation:
 .\.venv\Scripts\python.exe -m chhayageet.cli run-weekly --profile-id default --config-key default --verbose
 ```
 
+Preview without publishing:
+
+```powershell
+.\.venv\Scripts\python.exe -m chhayageet.cli run-weekly --profile-id default --config-key default --verbose --dry-run
+```
+
 ## Selection Rules
 
 Current rules include:
@@ -139,6 +160,22 @@ Current rules include:
 - boost preferred artists and eras
 - limit repeated artists, eras, and query buckets in the final set
 - sync the playlist so removed candidates are also removed from YouTube
+
+Use `--dry-run` while tuning prompts and filters. It still calls YouTube search and metadata APIs, but it does not create playlists, add videos, delete videos, or write curation history to Supabase.
+
+## LLM Providers
+
+Set `preferred_model` in Supabase guidance using `provider:model`.
+
+Supported providers:
+
+- `openai:gpt-4.1-mini` uses `OPENAI_API_KEY`
+- `claude:claude-sonnet-4-5` uses `ANTHROPIC_API_KEY`
+- `gemini:gemini-2.0-flash` uses `GEMINI_API_KEY` or `GOOGLE_API_KEY`
+- `ollama:llama3.1` uses `OLLAMA_BASE_URL`, defaulting to `http://localhost:11434`
+- `none` disables LLM calls
+
+The LLM never invents final YouTube IDs. It only expands search queries and adjusts scores for candidates already returned by the YouTube Data API.
 
 ## Repository Notes
 

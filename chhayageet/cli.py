@@ -6,6 +6,7 @@ from chhayageet.config import GuidanceConfig, ListenerProfile
 from chhayageet.curation_engine import CurationEngine
 from chhayageet.env import load_environment
 from chhayageet.history_store import HistoryStore
+from chhayageet.llm_curator import LLMCurator
 from chhayageet.youtube_client import YouTubeClient
 
 
@@ -49,6 +50,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print candidates, selected songs, and playlist update details",
     )
+    run_weekly.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview candidates and selections without changing YouTube or Supabase history",
+    )
 
     sync_profile = subparsers.add_parser("sync-profile", help="Upload a local profile JSON to Supabase")
     sync_profile.add_argument(
@@ -73,6 +79,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--playlist-prefix",
         required=True,
         help="Playlist title prefix",
+    )
+    sync_config.add_argument(
+        "--preferred-model",
+        default="none",
+        help="LLM model as provider:model, for example openai:gpt-4.1-mini, claude:claude-sonnet-4-5, gemini:gemini-2.0-flash, ollama:llama3.1, or none",
     )
     sync_config.add_argument(
         "--config-key",
@@ -116,13 +127,16 @@ def run_weekly(args: argparse.Namespace) -> int:
             youtube_account=guidance.youtube_account,
             force_reauth=args.force_youtube_reauth,
         )
-        engine = CurationEngine(profile, youtube, history)
-        result = engine.curate()
+        engine = CurationEngine(profile, youtube, history, LLMCurator(guidance.preferred_model))
+        result = engine.curate(dry_run=args.dry_run)
     finally:
         history.close()
 
     print(f"Account: {result['channel_title']}")
-    print(f"Playlist: {result['playlist_title']} ({result['playlist_id']})")
+    playlist_id = result["playlist_id"] if result["playlist_id"] else "not created"
+    print(f"Playlist: {result['playlist_title']} ({playlist_id})")
+    if result["dry_run"]:
+        print("Dry run: no YouTube playlist changes or Supabase run history writes were made.")
     print(f"Songs selected: {result['selected_count']}")
     for title in result["selected_titles"]:
         print(f"- {title}")
@@ -176,6 +190,7 @@ def sync_config(args: argparse.Namespace) -> int:
         youtube_account=args.youtube_account,
         no_of_songs_per_playlist=args.songs_per_playlist,
         playlist_name_prefix=args.playlist_prefix,
+        preferred_model=args.preferred_model,
     )
     history = HistoryStore()
     try:

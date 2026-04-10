@@ -37,6 +37,17 @@ class HistoryStore:
         )
         return bool(response.data)
 
+    def has_video_outside_playlist(self, video_id: str, playlist_title: str) -> bool:
+        response = (
+            self.client.table("curated_videos")
+            .select("video_id")
+            .eq("video_id", video_id)
+            .neq("playlist_title", playlist_title)
+            .limit(1)
+            .execute()
+        )
+        return bool(response.data)
+
     def get_profile(self, profile_id: str) -> ListenerProfile:
         response = (
             self.client.table("listener_profiles")
@@ -70,29 +81,29 @@ class HistoryStore:
         row = guidance.to_row(config_key=config_key)
         self.client.table("config").upsert(row, on_conflict="config_key").execute()
 
-    def recent_artist_counts(self, limit: int = 100) -> dict[str, int]:
-        response = (
+    def recent_artist_counts(self, limit: int = 100, exclude_playlist_title: str | None = None) -> dict[str, int]:
+        query = (
             self.client.table("curated_videos")
             .select("inferred_artist, curated_at")
             .not_.is_("inferred_artist", "null")
             .neq("inferred_artist", "")
-            .order("curated_at", desc=True)
-            .limit(limit)
-            .execute()
         )
+        if exclude_playlist_title:
+            query = query.neq("playlist_title", exclude_playlist_title)
+        response = query.order("curated_at", desc=True).limit(limit).execute()
         counts = Counter(row["inferred_artist"] for row in response.data if row.get("inferred_artist"))
         return dict(counts)
 
-    def recent_era_counts(self, limit: int = 100) -> dict[str, int]:
-        response = (
+    def recent_era_counts(self, limit: int = 100, exclude_playlist_title: str | None = None) -> dict[str, int]:
+        query = (
             self.client.table("curated_videos")
             .select("inferred_era, curated_at")
             .not_.is_("inferred_era", "null")
             .neq("inferred_era", "")
-            .order("curated_at", desc=True)
-            .limit(limit)
-            .execute()
         )
+        if exclude_playlist_title:
+            query = query.neq("playlist_title", exclude_playlist_title)
+        response = query.order("curated_at", desc=True).limit(limit).execute()
         counts = Counter(row["inferred_era"] for row in response.data if row.get("inferred_era"))
         return dict(counts)
 
@@ -103,6 +114,8 @@ class HistoryStore:
         total_candidates: int,
         selected: list[VideoCandidate],
     ) -> None:
+        self.client.table("curated_videos").delete().eq("playlist_title", playlist_title).execute()
+
         self.client.table("curation_runs").insert(
             {
                 "playlist_title": playlist_title,

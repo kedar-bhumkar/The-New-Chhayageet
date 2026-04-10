@@ -4,7 +4,8 @@ values (
     '{
       "youtube_account": "mandar",
       "no_of_songs_per_playlist": 12,
-      "playlist_name_prefix": "Chaayageet"
+      "playlist_name_prefix": "Chaayageet",
+      "preferred_model": "none"
     }'::jsonb
 )
 on conflict (config_key) do update

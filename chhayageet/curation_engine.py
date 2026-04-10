@@ -27,7 +27,8 @@ class CurationEngine:
         self.llm_curator = llm_curator or LLMCurator()
 
     def build_queries(self) -> list[str]:
-        queries = self.llm_curator.expand_queries(self.profile) if self.profile.use_llm else list(self.profile.include_queries)
+        use_llm = self.profile.use_llm or self.llm_curator.enabled
+        queries = self.llm_curator.expand_queries(self.profile) if use_llm else list(self.profile.include_queries)
         deduped: list[str] = []
         seen: set[str] = set()
         for query in queries:
@@ -37,23 +38,32 @@ class CurationEngine:
                 deduped.append(query.strip())
         return deduped
 
-    def curate(self) -> dict[str, object]:
+    def curate(self, *, dry_run: bool = False) -> dict[str, object]:
         playlist_date = datetime.now().date().isoformat()
         playlist_title = f"{self.profile.playlist_prefix} - {playlist_date}"
         playlist_description = self.profile.playlist_description
-        playlist_id = self.youtube.ensure_playlist(playlist_title, playlist_description)
+        playlist_id = ""
+        if not dry_run:
+            playlist_id = self.youtube.ensure_playlist(playlist_title, playlist_description)
 
-        candidates = self._collect_candidates()
+        candidates = self._collect_candidates(playlist_title)
         selected = self._select_candidates(candidates, self.profile.songs_per_week)
-        playlist_update = self.youtube.sync_playlist_videos(playlist_id, [item.video_id for item in selected])
+        playlist_update = {
+            "added": [],
+            "removed": [],
+            "kept": [],
+        }
+        if not dry_run:
+            playlist_update = self.youtube.sync_playlist_videos(playlist_id, [item.video_id for item in selected])
 
         curated_at = datetime.now().isoformat(timespec="seconds")
-        self.history.record_run(
-            playlist_title=playlist_title,
-            curated_at=curated_at,
-            total_candidates=len(candidates),
-            selected=selected,
-        )
+        if not dry_run:
+            self.history.record_run(
+                playlist_title=playlist_title,
+                curated_at=curated_at,
+                total_candidates=len(candidates),
+                selected=selected,
+            )
 
         return {
             "playlist_title": playlist_title,
@@ -61,6 +71,7 @@ class CurationEngine:
             "selected_count": len(selected),
             "selected_titles": [item.title for item in selected],
             "channel_title": self.youtube.channel_title(),
+            "dry_run": dry_run,
             "candidates": [self._serialize_candidate(item) for item in candidates],
             "selected": [self._serialize_candidate(item) for item in selected],
             "playlist_update": playlist_update,
@@ -79,7 +90,7 @@ class CurationEngine:
             "rejection_reasons": list(candidate.rejection_reasons),
         }
 
-    def _collect_candidates(self) -> list[VideoCandidate]:
+    def _collect_candidates(self, playlist_title: str) -> list[VideoCandidate]:
         candidates: list[VideoCandidate] = []
         for query in self.build_queries():
             candidates.extend(
@@ -94,10 +105,24 @@ class CurationEngine:
         for item in candidates:
             unique_by_video.setdefault(item.video_id, item)
 
-        enriched = [self._score_candidate(item) for item in unique_by_video.values()]
+        enriched = [self._score_candidate(item, playlist_title) for item in unique_by_video.values()]
+        self._apply_llm_rerank(enriched)
         return sorted(enriched, key=lambda item: item.score, reverse=True)
 
-    def _score_candidate(self, candidate: VideoCandidate) -> VideoCandidate:
+    def _apply_llm_rerank(self, candidates: list[VideoCandidate]) -> None:
+        if not (self.profile.use_llm or self.llm_curator.enabled):
+            return
+        adjustments = self.llm_curator.rerank_candidates(
+            self.profile,
+            candidates,
+            self.profile.songs_per_week,
+        )
+        for candidate in candidates:
+            if candidate.score < 0:
+                continue
+            candidate.score += adjustments.get(candidate.video_id, 0.0)
+
+    def _score_candidate(self, candidate: VideoCandidate, playlist_title: str) -> VideoCandidate:
         title = unescape(candidate.title).lower()
         description = unescape(candidate.description).lower()
         channel = candidate.channel_title.lower()
@@ -107,7 +132,7 @@ class CurationEngine:
         candidate.inferred_artist = self._infer_artist(full_text)
         candidate.inferred_era = self._infer_era(full_text)
 
-        if self.history.has_video(candidate.video_id):
+        if self.history.has_video_outside_playlist(candidate.video_id, playlist_title):
             candidate.rejection_reasons.append("already used")
             candidate.score = -100.0
             return candidate
@@ -143,15 +168,19 @@ class CurationEngine:
         if "live" in full_text:
             score -= 1.5
 
-        score += self._diversity_penalty(candidate.inferred_artist, candidate.inferred_era)
+        score += self._diversity_penalty(
+            candidate.inferred_artist,
+            candidate.inferred_era,
+            playlist_title,
+        )
 
         candidate.score = score
         return candidate
 
-    def _diversity_penalty(self, artist: str, era: str) -> float:
+    def _diversity_penalty(self, artist: str, era: str, playlist_title: str) -> float:
         penalty = 0.0
-        recent_artist_counts = self.history.recent_artist_counts()
-        recent_era_counts = self.history.recent_era_counts()
+        recent_artist_counts = self.history.recent_artist_counts(exclude_playlist_title=playlist_title)
+        recent_era_counts = self.history.recent_era_counts(exclude_playlist_title=playlist_title)
 
         if artist:
             penalty -= recent_artist_counts.get(artist, 0) * 0.75
