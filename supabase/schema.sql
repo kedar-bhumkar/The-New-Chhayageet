@@ -76,6 +76,7 @@ create table if not exists public.listener_profiles (
     include_queries jsonb not null,
     exclude_keywords jsonb not null,
     preferred_artists jsonb not null,
+    preferred_music_directors jsonb not null default '[]'::jsonb,
     preferred_eras jsonb not null,
     preferred_moods jsonb not null,
     language_hint text not null,
@@ -84,6 +85,9 @@ create table if not exists public.listener_profiles (
     use_llm boolean not null default false,
     updated_at timestamptz not null default timezone('utc', now())
 );
+
+alter table public.listener_profiles
+    add column if not exists preferred_music_directors jsonb not null default '[]'::jsonb;
 
 create table if not exists public.curated_videos (
     video_id text primary key,

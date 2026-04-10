@@ -341,8 +341,8 @@ class CatalogStore:
         if mode == "random":
             return base_candidates
 
-        singers = guidance.preferred_singers or profile.preferred_artists
-        music_directors = guidance.preferred_music_directors or []
+        singers = profile.preferred_artists
+        music_directors = profile.preferred_music_directors
         filtered = []
         for item in base_candidates:
             if guidance.year_min is not None and item.album_year is not None and item.album_year < guidance.year_min:

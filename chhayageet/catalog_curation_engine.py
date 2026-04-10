@@ -224,11 +224,13 @@ class CatalogCurationEngine:
         score = 0.0
         score += item.song_rating
         score += item.album_rating * 0.25
-        if self.guidance.preferred_singers and self._contains_any(item.song_singers, self.guidance.preferred_singers):
+        preferred_artists = self.profile.preferred_artists
+        preferred_music_directors = self.profile.preferred_music_directors
+        if preferred_artists and self._contains_any(item.song_singers, preferred_artists):
             score += 3.0
-        if self.guidance.preferred_music_directors and self._contains_any(
+        if preferred_music_directors and self._contains_any(
             item.album_music_director,
-            self.guidance.preferred_music_directors,
+            preferred_music_directors,
         ):
             score += 2.0
         decade = self._decade_from_year(item.album_year)

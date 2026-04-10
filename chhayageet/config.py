@@ -15,8 +15,6 @@ class GuidanceConfig:
     preferred_model: str = "none"
     mode: str = "random"
     candidate_pool_size: int = 50
-    preferred_singers: list[str] | None = None
-    preferred_music_directors: list[str] | None = None
     year_min: int | None = None
     year_max: int | None = None
     min_song_rating: float | None = None
@@ -49,8 +47,6 @@ class GuidanceConfig:
             "preferred_model",
             "mode",
             "candidate_pool_size",
-            "preferred_singers",
-            "preferred_music_directors",
             "year_min",
             "year_max",
             "min_song_rating",
@@ -60,8 +56,6 @@ class GuidanceConfig:
         shaped.setdefault("preferred_model", "none")
         shaped.setdefault("mode", "random")
         shaped.setdefault("candidate_pool_size", 50)
-        shaped.setdefault("preferred_singers", None)
-        shaped.setdefault("preferred_music_directors", None)
         return shaped
 
 
@@ -74,6 +68,7 @@ class ListenerProfile:
     include_queries: list[str]
     exclude_keywords: list[str]
     preferred_artists: list[str]
+    preferred_music_directors: list[str]
     preferred_eras: list[str]
     preferred_moods: list[str]
     language_hint: str
@@ -98,6 +93,7 @@ class ListenerProfile:
             "include_queries",
             "exclude_keywords",
             "preferred_artists",
+            "preferred_music_directors",
             "preferred_eras",
             "preferred_moods",
             "language_hint",
@@ -107,6 +103,7 @@ class ListenerProfile:
         }
         shaped = {key: value for key, value in dict(payload).items() if key in allowed_keys}
         shaped.setdefault("profile_id", "default")
+        shaped.setdefault("preferred_music_directors", [])
         return cls(**shaped)
 
     def to_dict(self) -> dict:

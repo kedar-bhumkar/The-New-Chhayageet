@@ -95,18 +95,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Number of catalog candidates to validate before final selection",
     )
-    sync_config.add_argument(
-        "--preferred-singer",
-        action="append",
-        dest="preferred_singers",
-        help="Preferred singer for user-driven mode; can be provided multiple times",
-    )
-    sync_config.add_argument(
-        "--preferred-music-director",
-        action="append",
-        dest="preferred_music_directors",
-        help="Preferred music director for user-driven mode; can be provided multiple times",
-    )
     sync_config.add_argument("--year-min", type=int, default=None, help="Minimum album year")
     sync_config.add_argument("--year-max", type=int, default=None, help="Maximum album year")
     sync_config.add_argument("--min-song-rating", type=float, default=None, help="Minimum song rating")
@@ -260,8 +248,6 @@ def sync_config(args: argparse.Namespace) -> int:
         preferred_model=args.preferred_model,
         mode=args.mode,
         candidate_pool_size=args.candidate_pool_size,
-        preferred_singers=args.preferred_singers,
-        preferred_music_directors=args.preferred_music_directors,
         year_min=args.year_min,
         year_max=args.year_max,
         min_song_rating=args.min_song_rating,
