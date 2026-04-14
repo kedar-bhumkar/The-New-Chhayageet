@@ -87,6 +87,9 @@ class CatalogCurationEngine:
         return live
 
     def _select(self, candidates: list[CatalogCandidate], limit: int) -> list[CatalogCandidate]:
+        if self.guidance.mode.lower().strip() == "specials":
+            return candidates[:limit]
+
         scored = [self._score(item) for item in candidates]
         random.shuffle(scored)
         scored.sort(key=lambda item: item.score, reverse=True)
@@ -221,6 +224,9 @@ class CatalogCurationEngine:
         return decade
 
     def _score(self, item: CatalogCandidate) -> CatalogCandidate:
+        if self.guidance.mode.lower().strip() == "specials":
+            return item
+
         score = 0.0
         score += item.song_rating
         score += item.album_rating * 0.25

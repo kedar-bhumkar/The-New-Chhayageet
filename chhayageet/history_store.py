@@ -81,6 +81,10 @@ class HistoryStore:
         row = guidance.to_row(config_key=config_key)
         self.client.table("config").upsert(row, on_conflict="config_key").execute()
 
+    def run_special_song_query(self, sql_query: str) -> list[dict]:
+        response = self.client.rpc("run_special_song_query", {"sql_query": sql_query}).execute()
+        return response.data or []
+
     def recent_artist_counts(self, limit: int = 100, exclude_playlist_title: str | None = None) -> dict[str, int]:
         query = (
             self.client.table("curated_videos")

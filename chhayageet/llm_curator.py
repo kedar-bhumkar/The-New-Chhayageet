@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from os import environ
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -103,6 +104,39 @@ class LLMCurator:
     def explain_selection(self, title: str, query: str) -> str:
         return f"Selected from query '{query}' because it fits the requested Hindi mood mix."
 
+    def generate_special_sql(self, special_instructions: str, limit: int) -> str:
+        instructions = special_instructions.strip()
+        if not self.enabled or not instructions:
+            return ""
+
+        schema_text = self._load_schema_text()
+        if not schema_text:
+            return ""
+
+        prompt = {
+            "task": "Generate a PostgreSQL SELECT query for special playlist instructions.",
+            "rules": [
+                "Return JSON only.",
+                "Return a single SQL query string in the sql field.",
+                "The query must be a read-only SELECT statement.",
+                "Use only the tables and columns present in the provided schema.",
+                "Join songs and albums using songs.album_uuid = albums.album_uuid.",
+                "Always include these output columns with these exact aliases: "
+                "song_uuid, album_uuid, song_title, song_singers, song_rating, youtube_url, youtube_video_id, "
+                "album_title, album_year, album_music_director, album_rating.",
+                "Only return songs that have a non-null, non-empty youtube_url and youtube_video_id and is_used = false.",
+                "Exclude devotional content using title, singer, or album text if relevant to avoid obvious devotional tracks.",
+                f"Limit the results to at most {limit} rows.",
+                "Do not use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, GRANT, REVOKE, or comments.",
+            ],
+            "special_instructions": instructions,
+            "schema": schema_text,
+            "response_schema": {"sql": "string"},
+        }
+        payload = self._complete_json(prompt)
+        sql = payload.get("sql", "") if isinstance(payload, dict) else ""
+        return self._clean_sql(sql)
+
     def _parse_model(self, value: str) -> tuple[str, str]:
         if not value or value.lower() == "none":
             return "none", ""
@@ -115,6 +149,13 @@ class LLMCurator:
         if normalized_provider == "google":
             normalized_provider = "gemini"
         return normalized_provider, model.strip()
+
+    def _load_schema_text(self) -> str:
+        schema_path = Path(__file__).resolve().parent.parent / "supabase" / "schema.sql"
+        try:
+            return schema_path.read_text(encoding="utf-8")
+        except OSError:
+            return ""
 
     def _complete_json(self, prompt: dict[str, Any]) -> dict[str, Any]:
         system = "You are a careful Hindi music curator. Return strict JSON only."
@@ -245,3 +286,15 @@ class LLMCurator:
         except json.JSONDecodeError:
             return {}
         return payload if isinstance(payload, dict) else {}
+
+    def _clean_sql(self, sql: Any) -> str:
+        if not isinstance(sql, str):
+            return ""
+        cleaned = sql.strip()
+        cleaned = re.sub(r"^```(?:sql)?\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        cleaned = cleaned.strip().strip("`").strip()
+        if cleaned.lower().startswith("sql"):
+            cleaned = cleaned[3:].lstrip(":").strip()
+        cleaned = cleaned.rstrip(";").strip()
+        return cleaned

@@ -86,8 +86,13 @@ def build_parser() -> argparse.ArgumentParser:
     sync_config.add_argument(
         "--mode",
         default="random",
-        choices=["random", "user-driven", "youtube-search"],
+        choices=["random", "user-driven", "youtube-search", "specials"],
         help="Curation mode",
+    )
+    sync_config.add_argument(
+        "--special-instructions",
+        default=None,
+        help="Natural-language instructions for the specials mode SQL generator",
     )
     sync_config.add_argument(
         "--candidate-pool-size",
@@ -158,7 +163,7 @@ def run_weekly(args: argparse.Namespace) -> int:
             youtube_account=guidance.youtube_account,
             force_reauth=args.force_youtube_reauth,
         )
-        if guidance.mode in {"random", "user-driven"}:
+        if guidance.mode in {"random", "user-driven", "specials"}:
             engine = CatalogCurationEngine(profile, guidance, CatalogStore(history), youtube)
             result = engine.curate(dry_run=args.dry_run)
         else:
@@ -241,12 +246,18 @@ def sync_profile(args: argparse.Namespace) -> int:
 
 
 def sync_config(args: argparse.Namespace) -> int:
+    if args.mode == "specials" and not (args.special_instructions or "").strip():
+        raise ValueError("--special-instructions is required when --mode specials is used.")
+    if args.mode == "specials" and (args.preferred_model or "none").strip().lower() == "none":
+        raise ValueError("--preferred-model must be set when --mode specials is used.")
+
     guidance = GuidanceConfig(
         youtube_account=args.youtube_account,
         no_of_songs_per_playlist=args.songs_per_playlist,
         playlist_name_prefix=args.playlist_prefix,
         preferred_model=args.preferred_model,
         mode=args.mode,
+        special_instructions=args.special_instructions,
         candidate_pool_size=args.candidate_pool_size,
         year_min=args.year_min,
         year_max=args.year_max,

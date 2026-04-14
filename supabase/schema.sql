@@ -147,3 +147,46 @@ create index if not exists curated_videos_source_idx
 
 create index if not exists curation_runs_playlist_title_idx
     on public.curation_runs (playlist_title);
+
+create or replace function public.run_special_song_query(sql_query text)
+returns table (
+    song_uuid uuid,
+    album_uuid uuid,
+    song_title text,
+    song_singers text,
+    song_rating numeric,
+    youtube_url text,
+    youtube_video_id text,
+    album_title text,
+    album_year integer,
+    album_music_director text,
+    album_rating numeric
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    normalized_query text;
+begin
+    normalized_query := trim(sql_query);
+
+    if normalized_query = '' then
+        raise exception 'SQL query must not be empty.';
+    end if;
+
+    if normalized_query !~* '^select\s' then
+        raise exception 'Only SELECT statements are allowed.';
+    end if;
+
+    if normalized_query ~* '\m(insert|update|delete|drop|alter|create|truncate|grant|revoke|comment|copy|execute|do)\M' then
+        raise exception 'Unsafe SQL detected.';
+    end if;
+
+    if normalized_query !~* '\msongs\M' then
+        raise exception 'Query must reference the songs table.';
+    end if;
+
+    return query execute normalized_query;
+end;
+$$;

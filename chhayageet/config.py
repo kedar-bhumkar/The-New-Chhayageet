@@ -14,6 +14,7 @@ class GuidanceConfig:
     playlist_name_prefix: str
     preferred_model: str = "none"
     mode: str = "random"
+    special_instructions: str | None = None
     candidate_pool_size: int = 50
     year_min: int | None = None
     year_max: int | None = None
@@ -46,6 +47,7 @@ class GuidanceConfig:
             "playlist_name_prefix",
             "preferred_model",
             "mode",
+            "special_instructions",
             "candidate_pool_size",
             "year_min",
             "year_max",

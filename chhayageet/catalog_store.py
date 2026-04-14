@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from chhayageet.catalog_models import CatalogCandidate
 from chhayageet.config import GuidanceConfig, ListenerProfile
 from chhayageet.history_store import HistoryStore
+from chhayageet.llm_curator import LLMCurator
 
 
 class CatalogStore:
@@ -58,7 +59,10 @@ class CatalogStore:
         *,
         fetch_limit: int = 5000,
     ) -> list[CatalogCandidate]:
-        if guidance.mode.lower().strip() == "user-driven":
+        mode = guidance.mode.lower().strip()
+        if mode == "specials":
+            return self._fetch_special_candidates(guidance)
+        if mode == "user-driven":
             songs, albums = self._fetch_user_driven_rows(max(fetch_limit, guidance.candidate_pool_size * 80))
         else:
             songs = self._fetch_unused_song_sample(fetch_limit)
@@ -70,10 +74,26 @@ class CatalogStore:
             for song in songs
         ]
         filtered = self._filter_candidates(candidates, guidance, profile)
-        if guidance.mode.lower().strip() == "user-driven":
+        if mode == "user-driven":
             return self._balanced_candidate_pool(filtered, guidance.candidate_pool_size)
         random.shuffle(filtered)
         return filtered[: guidance.candidate_pool_size]
+
+    def _fetch_special_candidates(self, guidance: GuidanceConfig) -> list[CatalogCandidate]:
+        instructions = (guidance.special_instructions or "").strip()
+        if not instructions:
+            raise ValueError("Mode 'specials' requires guidance.special_instructions.")
+
+        curator = LLMCurator(guidance.preferred_model)
+        sql_query = curator.generate_special_sql(
+            instructions,
+            max(guidance.candidate_pool_size * 4, guidance.no_of_songs_per_playlist * 8),
+        )
+        if not sql_query:
+            raise ValueError("Could not generate SQL for specials mode. Check preferred_model and special_instructions.")
+
+        rows = self.history.run_special_song_query(sql_query)
+        return [self._candidate_from_special_row(row) for row in rows]
 
     def _fetch_unused_song_sample(self, fetch_limit: int) -> list[dict]:
         count_response = (
@@ -330,6 +350,21 @@ class CatalogStore:
             album_rating=float(album.get("album_rating") or 0),
         )
 
+    def _candidate_from_special_row(self, row: dict) -> CatalogCandidate:
+        return CatalogCandidate(
+            song_uuid=row.get("song_uuid") or "",
+            album_uuid=row.get("album_uuid") or "",
+            song_title=row.get("song_title") or "",
+            song_singers=row.get("song_singers") or "",
+            song_rating=float(row.get("song_rating") or 0),
+            youtube_url=row.get("youtube_url") or "",
+            youtube_video_id=row.get("youtube_video_id") or "",
+            album_title=row.get("album_title") or "",
+            album_year=row.get("album_year"),
+            album_music_director=row.get("album_music_director") or "",
+            album_rating=float(row.get("album_rating") or 0),
+        )
+
     def _filter_candidates(
         self,
         candidates: list[CatalogCandidate],
@@ -338,7 +373,7 @@ class CatalogStore:
     ) -> list[CatalogCandidate]:
         base_candidates = [item for item in candidates if not self._is_devotional(item)]
         mode = guidance.mode.lower().strip()
-        if mode == "random":
+        if mode in {"random", "specials"}:
             return base_candidates
 
         singers = profile.preferred_artists
